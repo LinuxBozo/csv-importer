@@ -46,7 +46,7 @@ class CSVImporterPlugin {
         'csv_post_author'     => null,
         'csv_post_slug'       => null,
         'csv_post_parent'     => 0,
-        
+
     );
 
     var $log = array();
@@ -246,9 +246,9 @@ class CSVImporterPlugin {
         $skipped = 0;
         $imported = 0;
         $comments = 0;
-        
+
         foreach ($csv->connect() as $csv_data) {
-        
+
             if ($post_id = $this->create_post($csv_data, $options)) {
                 $imported++;
                 $comments += $this->add_comments($post_id, $csv_data);
@@ -296,7 +296,7 @@ class CSVImporterPlugin {
             'post_author'  => $this->get_auth_id($data['csv_post_author']),
             'tax_input'    => $this->get_taxonomies($data),
             'post_parent'  => $data['csv_post_parent'],
-            
+
         );
 
         // pages don't have tags or categories
@@ -325,26 +325,27 @@ class CSVImporterPlugin {
     /**
      * Return id of first image that matches the passed filename
      * @param string $filename csv_post_image cell contents
-     * 
+     *
      */
-function get_image_id($filename){
-    //try searching titles first
-    $filename =  preg_replace('/\.[^.]*$/', '', $filename);
-     $filename = strtolower(str_replace(' ','-',$filename));
-     $args = array('post_type' => 'attachment','name'=>$filename);
-    $results = get_posts($args);
-    //$results = get_page_by_title($filename, ARRAY_A, 'attachment');
-    if(count($results)==0) return;
-     if(count($results)==1) return $results[0]->ID;
-    elseif(count($results)>1) {
-        foreach($results as $result){
-        if(strpos($result->guid,$filename))
-                return $result->ID;
+    function get_image_id($filename){
+        //try searching titles first
+        $filename =  preg_replace('/\.[^.]*$/', '', $filename);
+         $filename = strtolower(str_replace(' ','-',$filename));
+         $args = array('post_type' => 'attachment','name'=>$filename);
+        $results = get_posts($args);
+        //$results = get_page_by_title($filename, ARRAY_A, 'attachment');
+        if(count($results)==0) return;
+         if(count($results)==1) return $results[0]->ID;
+        elseif(count($results)>1) {
+            foreach($results as $result){
+            if(strpos($result->guid,$filename))
+                    return $result->ID;
+            }
         }
+
+
     }
-    
-    
-}
+
     /**
      * Return an array of category ids for a post.
      *
@@ -436,31 +437,32 @@ function get_image_id($filename){
      * @param array $data
      * @return array
      */
-function add_attachments($post_id, $data){
-   // $this->log['notice'][]= 'adding attachments for id#'. $post_id;
-    $attachments = array();
-    foreach ($data as $k => $v) {
-            if (preg_match('/^csv_attachment_(.*)$/', $k, $matches)) {
-               // $this->log['notice'][] = 'Found this attachment: ' . $matches[1] . ' with this value:' . $data[$k];
-                $a_name = $matches[1];
-               
-                    $attachment[$a_name] = $data[$k];
-                   
-                    if(preg_match('|^http(s)?://[a-z0-9-]+(.[a-z0-9-]+)*(:[0-9]+)?(/.*)?$|i', $data[$k])) {
-                        $url = $v;
-                        $id = $this->download_attachment($data[$k],$post_id,$a_name);}
-                    if($a_name == 'thumbnail' && $id<>''){
-                        add_post_meta($post_id, '_thumbnail_id',$id);
-                    }
+    function add_attachments($post_id, $data){
+       // $this->log['notice'][]= 'adding attachments for id#'. $post_id;
+        $attachments = array();
+        foreach ($data as $k => $v) {
+                if (preg_match('/^csv_attachment_(.*)$/', $k, $matches)) {
+                   // $this->log['notice'][] = 'Found this attachment: ' . $matches[1] . ' with this value:' . $data[$k];
+                    $a_name = $matches[1];
+
+                        $attachment[$a_name] = $data[$k];
+
+                        if(preg_match('|^http(s)?://[a-z0-9-]+(.[a-z0-9-]+)*(:[0-9]+)?(/.*)?$|i', $data[$k])) {
+                            $url = $v;
+                            $id = $this->download_attachment($data[$k],$post_id,$a_name);}
+                        if($a_name == 'thumbnail' && $id<>''){
+                            add_post_meta($post_id, '_thumbnail_id',$id);
+                        }
+                }
+                else if($k=='csv_post_image'){
+                    $id = $this->get_image_id($v);
+                    if($id<>'') add_post_meta($post_id, '_thumbnail_id',$this->get_image_id($v));
+                }
             }
-            else if($k=='csv_post_image'){
-                $id = $this->get_image_id($v);
-                if($id<>'') add_post_meta($post_id, '_thumbnail_id',$this->get_image_id($v));
-            }
-        } 
-        return $attachments;
-}
-/**
+            return $attachments;
+    }
+
+    /**
      * Download file from remote URL, save it to the Media Library, and return
      * the attachment id
      *
@@ -469,41 +471,43 @@ function add_attachments($post_id, $data){
      * @param string $desc
      * @return int
      */
-function download_attachment($url, $post_id, $desc){
-     set_time_limit(10);
-    $tmp = download_url( $url );
-	 if(strlen(trim($url))<5) return;
-	
-	// Set variables for storage
-	// fix file filename for query strings
-	//preg_match('/[^\?]+\.(jpg|JPG|jpe|JPE|jpeg|JPEG|gif|GIF|png|PNG|wav|mp3|pdf)/', $file, $matches);
-	 $file_array = array(
-        'name' => basename( $url ),
-        'tmp_name' => $tmp
-             );
+    function download_attachment($url, $post_id, $desc){
+         set_time_limit(10);
+        $tmp = download_url( $url );
+    	 if(strlen(trim($url))<5) return;
+
+    	// Set variables for storage
+    	// fix file filename for query strings
+    	//preg_match('/[^\?]+\.(jpg|JPG|jpe|JPE|jpeg|JPEG|gif|GIF|png|PNG|wav|mp3|pdf)/', $file, $matches);
+    	 $file_array = array(
+            'name' => basename( $url ),
+            'tmp_name' => $tmp
+                 );
 
 
-	// If error storing temporarily, unlink
-	if ( is_wp_error( $tmp ) ) {
-		@unlink($file_array['tmp_name']);
-		$file_array['tmp_name'] = '';
-	}
+    	// If error storing temporarily, unlink
+    	if ( is_wp_error( $tmp ) ) {
+    		@unlink($file_array['tmp_name']);
+    		$file_array['tmp_name'] = '';
+    	}
 
-	// do the validation and storage stuff
-	$id = media_handle_sideload( $file_array, $post_id, $desc );
-        
-	// If error storing permanently, unlink
-	if ( is_wp_error($id) ) {
-             $this->log['error'][] = $id->get_error_message() .' : ' . $url;
-		@unlink($file_array['tmp_name']);
-		return $id;
-	}
-         //$this->log['notice'][] = 'Downloaded the file. Here\'s the id: ' . $id;
+    	// do the validation and storage stuff
+    	$id = media_handle_sideload( $file_array, $post_id, $desc );
 
-	$src = wp_get_attachment_url( $id );
-         //$this->log['notice'][] = 'Saved the file successfully! Here\'s the path: ' . $src ;
-    return $id;
-}
+    	// If error storing permanently, unlink
+    	if ( is_wp_error($id) ) {
+                 $this->log['error'][] = $id->get_error_message() .' : ' . $url;
+    		@unlink($file_array['tmp_name']);
+    		return $id;
+    	}
+             //$this->log['notice'][] = 'Downloaded the file. Here\'s the id: ' . $id;
+
+    	$src = wp_get_attachment_url( $id );
+             //$this->log['notice'][] = 'Saved the file successfully! Here\'s the path: ' . $src ;
+        return $id;
+    }
+
+
     /**
      * Return an array of term IDs for hierarchical taxonomies or the original
      * string from CSV for non-hierarchical taxonomies. The original string
@@ -672,27 +676,26 @@ function download_attachment($url, $post_id, $desc){
     function create_custom_fields($post_id, $data) {
         foreach ($data as $k => $v) {
             // anything that doesn't start with csv_ is a custom field
-            if (!preg_match('/^csv_/', $k) && $v != '') {
+            if (!preg_match('/^csv_/', $k) && $v != '')  {
                  // if value is serialized unserialize it
-            if( is_serialized($v) ) {
-                $v = unserialize($v);
-                // the unserialized array will be re-serialized with add_post_meta()
-            }elseif(strpos($v,'::')){
-                // import data and serialize it formatted as
-                // key::value[]key::value
-                $array = explode("[]",$v);
-                
-                foreach ($array as $lineNum => $line)
-{
-list($key, $value) = explode("::", $line);
-$newArray[$key] = $value;
-}
-$v = $newArray;
-            }
+                if (is_serialized($v) ) {
+                    $v = unserialize($v);
+                    // the unserialized array will be re-serialized with add_post_meta()
+                } elseif (strpos($v,'::')) {
+                    // import data and serialize it formatted as
+                    // key::value[]key::value
+                    $array = explode("[]",$v);
+
+                    foreach ($array as $lineNum => $line) {
+                        list($key, $value) = explode("::", $line);
+                        $newArray[$key] = $value;
+                    }
+                    $v = $newArray;
+                }
                 add_post_meta($post_id, $k, $v);
             }
         }
-        
+
     }
 
     function get_auth_id($author) {
