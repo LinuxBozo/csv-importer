@@ -124,20 +124,23 @@ class CSVImporterPlugin {
 	</form>
 	<h2>Standard Fields</h2>
 	<ul>
-		<li><code>csv_post_title</code></li>
-		<li><code>csv_post_post</code></li>
-		<li><code>csv_post_type</code></li>
-		<li><code>csv_post_excerpt</code></li>
-		<li><code>csv_post_date</code></li>
-		<li><code>csv_post_tags</code></li>
-		<li><code>csv_post_categories</code></li>
-		<li><code>csv_ctax_{taxonomy_name}</code></li>
-		<li><code>csv_post_author</code></li>
-		<li><code>csv_post_slug</code></li>
-		<li><code>csv_post_parent</code></li>
-		<li><code>csv_attachment_{attachment_name}</code></li>
-		<li><code>csv_attachment_thumbnail</code></li>
+		<li><code>csv_post_title</code> : title of the post</li>
+		<li><code>csv_post_post</code> : body of the post</li>
+		<li><code>csv_post_type</code> : one of either 'post', 'page', or your custom post type</li>
+		<li><code>csv_post_excerpt</code> : small excerpt of you post contents</li>
+		<li><code>csv_post_date</code> : date your post should be published</li>
+		<li><code>csv_post_tags</code> : your post tags (comma separated)</li>
+		<li><code>csv_post_categories</code> : See below (Post categories)</li>
+		<li><code>csv_ctax_{taxonomy_name}</code> : See below (Custom taxonomies)</li>
+		<li><code>csv_post_author</code> : numeric user id or login name. If not specified or user does not exist, the plugin will assign the posts to the user performing the import.</li>
+		<li><code>csv_post_slug</code> : post slug used in permalinks</li>
+		<li><code>csv_post_parent</code> : post parent id (numeric)</li>
+		<li><code>csv_attachment_{attachment_name}</code> : See below (Attachments)</li>
+		<li><code>csv_attachment_thumbnail</code> : See below (Attachments)</li>
 	</ul>
+    <h2>Post categories</h2>
+    <p>A pipe (|) separated list of category names or ids. It's also possible to assign posts to non-existing subcategories, using > to denote category relationships, e.g. Animalia > Chordata > Mammalia. If any of the categories in the chain does not exist, the plugin will automatically create it. It's also possible to specify the parent category using an id, as in 42 > Primates > Callitrichidae, where 42 is an existing category id. To specify a category that has a greater than sign (>) in the name, use the HTML entity &amp;gt;
+
 	<h2>Custom taxonomies</h2>
 	<p>Once custom taxonomies are set up in your theme's functions.php file or by using a 3rd party plugin, <code>csv_ctax_{taxonomy_name}</code> columns can be used to assign imported data to the taxonomies.</p>
 
@@ -145,7 +148,7 @@ class CSVImporterPlugin {
 	<p>The syntax for non-hierarchical taxonomies is straightforward and is essentially the same as the <code>csv_post_tags</code> syntax.</p>
 
 	<h3>Hierarchical taxonomies</h3>
-	<p>The syntax for hierarchical taxonomies is more complicated. Each hierarchical taxonomy field is a tiny two-column CSV file, where <em>the order of columns matters</em>. The first column contains the name of the parent term and the second column contains the name of the child term. Top level terms have to be preceded either by an empty string or a 0 (zero). (precede each value with a comma).</p>
+	<p>The syntax for hierarchical taxonomies is also straightforward and is essentially the same as the <code>csv_post_categories</code> syntax.</p>
 
 	<h2>Attachments</h2>
 	<p>You can now add attachments by uploading the files via ftp and then including the full URL to the attachment file including images, documents or any other file type that WordPress supports. The format is <code>csv_attachment_{attachment_name}</code>.</p>
@@ -307,19 +310,12 @@ class CSVImporterPlugin {
             // faster, but I don't exactly remember why :) Most likely because
             // we don't assign default cat to post when csv_post_categories
             // is not empty.
-            $cats = $this->create_or_get_categories($data, $opt_cat);
-            $new_post['post_category'] = $cats['post'];
+            $new_post['post_category'] = $this->get_categories($data);
         }
 
         // create!
         $id = wp_insert_post($new_post);
 
-        if ('page' !== $type && !$id) {
-            // cleanup new categories on failure
-            foreach ($cats['cleanup'] as $c) {
-                wp_delete_term($c, 'category');
-            }
-        }
         return $id;
     }
     /**
@@ -350,56 +346,10 @@ class CSVImporterPlugin {
      * Return an array of category ids for a post.
      *
      * @param string  $data csv_post_categories cell contents
-     * @param integer $common_parent_id common parent id for all categories
      * @return array category ids
      */
-    function create_or_get_categories($data, $common_parent_id) {
-        $ids = array(
-            'post' => array(),
-            'cleanup' => array(),
-        );
-        $items = array_map('trim', explode(',', $data['csv_post_categories']));
-        foreach ($items as $item) {
-            if (is_numeric($item)) {
-                if (get_category($item) !== null) {
-                    $ids['post'][] = $item;
-                } else {
-                    $this->log['error'][] = "Category ID {$item} does not exist, skipping.";
-                }
-            } else {
-                $parent_id = $common_parent_id;
-                // item can be a single category name or a string such as
-                // Parent > Child > Grandchild
-                $categories = array_map('trim', explode('>', $item));
-                if (count($categories) > 1 && is_numeric($categories[0])) {
-                    $parent_id = $categories[0];
-                    if (get_category($parent_id) !== null) {
-                        // valid id, everything's ok
-                        $categories = array_slice($categories, 1);
-                    } else {
-                        $this->log['error'][] = "Category ID {$parent_id} does not exist, skipping.";
-                        continue;
-                    }
-                }
-                foreach ($categories as $category) {
-                    if ($category) {
-                        $term = $this->term_exists($category, 'category', $parent_id);
-                        if ($term) {
-                            $term_id = $term['term_id'];
-                        } else {
-                            $term_id = wp_insert_category(array(
-                                'cat_name' => $category,
-                                'category_parent' => $parent_id,
-                            ));
-                            $ids['cleanup'][] = $term_id;
-                        }
-                        $parent_id = $term_id;
-                    }
-                }
-                $ids['post'][] = $term_id;
-            }
-        }
-        return $ids;
+    function get_categories($data) {
+        return $this->create_terms('category', $data['csv_post_categories']);
     }
 
     /**
@@ -421,10 +371,9 @@ class CSVImporterPlugin {
             if (preg_match('/^csv_ctax_(.*)$/', $k, $matches)) {
                 $t_name = $matches[1];
                 if ($this->taxonomy_exists($t_name)) {
-                    $taxonomies[$t_name] = $this->create_terms($t_name,
-                        $data[$k]);
+                    $taxonomies[$t_name] = $this->create_terms($t_name, $data[$k]);
                 } else {
-                    $this->log['error'][] = "Unknown taxonomy $t_name";
+                    $this->log['error'][] = "Unknown taxonomy {$t_name}";
                 }
             }
         }
@@ -520,37 +469,48 @@ class CSVImporterPlugin {
     function create_terms($taxonomy, $field) {
         if (is_taxonomy_hierarchical($taxonomy)) {
             $term_ids = array();
-            foreach ($this->_parse_tax($field) as $row) {
-                list($parent, $child) = $row;
-                $parent_ok = true;
-                if ($parent) {
-                    $parent_info = $this->term_exists($parent, $taxonomy);
-                    if (!$parent_info) {
-                        // create parent
-                        $parent_info = wp_insert_term($parent, $taxonomy);
-                    }
-                    if (!is_wp_error($parent_info)) {
-                        $parent_id = $parent_info['term_id'];
+            $items = array_map('trim', explode('|', $field));
+            foreach ($items as $item) {
+                if (is_numeric($item)) {
+                    if (get_term($item, $taxonomy) !== null) {
+                        $term_ids[] = $item;
                     } else {
-                        // could not find or create parent
-                        $parent_ok = false;
+                        $this->log['error'][] = "{$taxonomy} ID {$item} does not exist, skipping.";
                     }
                 } else {
+                    // item can be a single category name or a string such as
+                    // Parent > Child > Grandchild
                     $parent_id = 0;
-                }
-
-                if ($parent_ok) {
-                    $child_info = $this->term_exists($child, $taxonomy, $parent_id);
-                    if (!$child_info) {
-                        // create child
-                        $child_info = wp_insert_term($child, $taxonomy,
-                            array('parent' => $parent_id));
+                    $categories = array_map('trim', explode('>', $item));
+                    if (count($categories) > 1 && is_numeric($categories[0])) {
+                        $parent_id = $categories[0];
+                        if (get_term($parent_id, $taxonomy) !== null) {
+                            // valid id, everything's ok
+                            $categories = array_slice($categories, 1);
+                        } else {
+                            $this->log['error'][] = "{$taxonomy} ID {$parent_id} does not exist, skipping.";
+                            continue;
+                        }
                     }
-                    if (!is_wp_error($child_info)) {
-                        $term_ids[] = $child_info['term_id'];
+                    foreach ($categories as $category) {
+                        if ($category) {
+                            $term = $this->term_exists($category, $taxonomy, $parent_id);
+                            if ($term) {
+                                $term_id = $term['term_id'];
+                            } else {
+                                $parent_info = array('parent' => $parent_id);
+                                $term_info= wp_insert_term($category, $taxonomy, $parent_info);
+                                if (!is_wp_error($term_info)) {
+                                    $term_id = $term_info['term_id'];
+                                }
+                            }
+                            $parent_id = $term_id ?: 0;
+                        }
                     }
+                    $term_ids[] = $term_id;
                 }
             }
+            delete_option($taxonomy . "_children");
             return $term_ids;
         } else {
             return $field;
@@ -577,45 +537,6 @@ class CSVImporterPlugin {
         } else {
             return is_taxonomy($taxonomy);
         }
-    }
-
-    /**
-     * Hierarchical taxonomy fields are tiny CSV files in their own right.
-     *
-     * @param string $field
-     * @return array
-     */
-    function _parse_tax($field) {
-        $data = array();
-        if (function_exists('str_getcsv')) { // PHP 5 >= 5.3.0
-            $lines = $this->split_lines($field);
-
-            foreach ($lines as $line) {
-                $data[] = str_getcsv($line, ',', '"');
-            }
-        } else {
-            // Use temp files for older PHP versions. Reusing the tmp file for
-            // the duration of the script might be faster, but not necessarily
-            // significant.
-            $handle = tmpfile();
-            fwrite($handle, $field);
-            fseek($handle, 0);
-
-            while (($r = fgetcsv($handle, 999999, ',', '"')) !== false) {
-                $data[] = $r;
-            }
-            fclose($handle);
-        }
-        return $data;
-    }
-
-    /**
-     * Try to split lines of text correctly regardless of the platform the text
-     * is coming from.
-     */
-    function split_lines($text) {
-        $lines = preg_split("/(\r\n|\n|\r)/", $text);
-        return $lines;
     }
 
     function add_comments($post_id, $data) {
