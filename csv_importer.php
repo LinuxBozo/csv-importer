@@ -2,8 +2,8 @@
 /*
 Plugin Name: CSV Importer
 Description: Import data as posts from a CSV file. <em>You can reach the author at <a href="mailto:d.v.kobozev@gmail.com">d.v.kobozev@gmail.com</a></em>.
-Version: 0.3.9
-Author: Denis Kobozev, Bryan Headrick
+Version: 0.4.0
+Author: Denis Kobozev, Bryan Headrick, M. Adam Kendall
 */
 /**
  * LICENSE: The MIT License {{{
